@@ -1,42 +1,72 @@
 // GOAL: This server, that plugin can ask toll for a given list of users
 
-use anyhow::Result;
-use reqwest::ClientBuilder;
-use std::time::Duration;
+mod directory;
+mod mock_directory;
+mod salary;
+mod toll;
 
-const GRAPH_TOKEN: &str = "alksjdf"; // later moved to .env file
+use anyhow::Result;
+
+use directory::DirectoryProvider;
+use mock_directory::MockDirectory;
+use salary::SalaryBook;
+use toll::{Attendee, TollReport};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Meeting Toll");
+    // 1) Directory (where titles come from).
+    //    GO LIVE: delete src/mock_directory.rs, drop the two `mock_directory` lines
+    //    above, and replace the next line with:
+    //        let dir = directory::GraphDirectory::new(std::env::var("GRAPH_TOKEN")?)?;
+    let dir = MockDirectory::new();
 
-    // Testing Microsoft Graph API
-    println!("Testing Microsoft Graph API");
+    // 2) Salary book (the admin's Excel - hardcoded for now).
+    let book = SalaryBook::sample();
 
-    // let access_token = std::env::var("GRAPH_TOKEN")?;
-    let access_token = GRAPH_TOKEN;
-    let user_email = "shiva.reddy@ulteig.com"; // test user email
+    // 3) The meeting: invitees + duration.
+    let emails = [
+        "shiva.reddy@ulteig.com",
+        "amy.lee@ulteig.com",
+        "raj.patel@ulteig.com",
+    ];
+    let duration_minutes = 60;
 
-    let info = get_user_jobtitle(&access_token, user_email).await?;
-    println!("{info}");
+    let report = compute_toll(&dir, &book, &emails, duration_minutes).await?;
+    println!("{report}");
 
     Ok(())
 }
 
-// Calls the Microsoft Graph API for a user's display name and job title.
-async fn get_user_jobtitle(access_token: &str, email: &str) -> Result<String> {
-    let url =
-        format!("https://graph.microsoft.com/v1.0/users/{email}?$select=displayName,jobTitle");
+/// Look up each invitee's title, price it, and total the meeting.
+async fn compute_toll<D: DirectoryProvider>(
+    dir: &D,
+    book: &SalaryBook,
+    emails: &[&str],
+    duration_minutes: u32,
+) -> Result<TollReport> {
+    let mut attendees = Vec::with_capacity(emails.len());
 
-    let timeout = Duration::new(5, 0);
-    let client = ClientBuilder::new().timeout(timeout).build()?;
+    for &email in emails {
+        let (display_name, job_title) = match dir.get_user(email).await? {
+            Some(u) => (u.display_name, u.job_title),
+            None => (format!("{email} (unknown)"), String::new()),
+        };
 
-    let resp = client.get(&url).bearer_auth(access_token).send().await?;
+        let annual_salary = book.salary_for_title(&job_title);
+        let cost = annual_salary.map_or(0.0, |s| toll::cost(s, duration_minutes));
 
-    if !resp.status().is_success() {
-        anyhow::bail!("Graph API returned an error: {}", resp.status());
+        attendees.push(Attendee {
+            display_name,
+            job_title,
+            annual_salary,
+            cost,
+        });
     }
 
-    let body = resp.text().await?;
-    Ok(body)
+    let total = attendees.iter().map(|a| a.cost).sum();
+    Ok(TollReport {
+        duration_minutes,
+        attendees,
+        total,
+    })
 }
