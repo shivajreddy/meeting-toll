@@ -4,6 +4,8 @@
 # Environment files (secrets: tokens, client secret, etc.)
 .env
 .env.*
+# ...but keep the committed template
+!.env.example
 
 # rustfmt backups
 **/*.rs.bk
