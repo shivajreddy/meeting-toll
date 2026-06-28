@@ -1,0 +1,12 @@
+# Rust build artifacts
+/target
+
+# Environment files (secrets: tokens, client secret, etc.)
+.env
+.env.*
+
+# rustfmt backups
+**/*.rs.bk
+
+# macOS
+.DS_Store
