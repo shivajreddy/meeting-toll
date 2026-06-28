@@ -1,6 +1,8 @@
 //! Directory providers: look up a user's name + job title by email.
 #![allow(dead_code)] // GraphDirectory is the go-live path, unused until the mock is removed.
 
+use std::future::Future;
+
 use anyhow::Result;
 
 /// What we need to know about a person to price a meeting.
@@ -10,10 +12,10 @@ pub struct UserInfo {
 }
 
 /// Source of user titles. Swap implementations to go from mock -> real Graph.
-#[allow(async_fn_in_trait)]
+/// The `Send` bound lets the future run across threads, which axum handlers require.
 pub trait DirectoryProvider {
     /// Returns `None` if the user doesn't exist.
-    async fn get_user(&self, email: &str) -> Result<Option<UserInfo>>;
+    fn get_user(&self, email: &str) -> impl Future<Output = Result<Option<UserInfo>>> + Send;
 }
 
 /// Real Microsoft Graph implementation (used once admin consent is granted).

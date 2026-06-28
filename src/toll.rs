@@ -3,6 +3,7 @@
 /// 40 hours/week * 52 weeks.
 const WORK_HOURS_PER_YEAR: f64 = 2080.0;
 
+#[derive(serde::Serialize)]
 pub struct Attendee {
     pub display_name: String,
     pub job_title: String,
@@ -10,6 +11,7 @@ pub struct Attendee {
     pub cost: f64,
 }
 
+#[derive(serde::Serialize)]
 pub struct TollReport {
     pub duration_minutes: u32,
     pub attendees: Vec<Attendee>,
@@ -19,7 +21,12 @@ pub struct TollReport {
 /// Per-attendee cost for a meeting of `duration_minutes`.
 pub fn cost(annual_salary: u32, duration_minutes: u32) -> f64 {
     let hourly = annual_salary as f64 / WORK_HOURS_PER_YEAR;
-    hourly * (duration_minutes as f64 / 60.0)
+    round_cents(hourly * (duration_minutes as f64 / 60.0))
+}
+
+/// Round a dollar amount to whole cents.
+pub fn round_cents(amount: f64) -> f64 {
+    (amount * 100.0).round() / 100.0
 }
 
 impl std::fmt::Display for TollReport {
